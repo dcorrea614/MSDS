@@ -1,0 +1,97 @@
+---
+title: "DATA607 - Project 1"
+author: "Diego Correa"
+date: "8/28/2020"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Description
+
+In this project, you’re given a text file with chess tournament results where the information has some structure. Your
+job is to create an R Markdown file that generates a .CSV file (that could for example be imported into a SQL database)
+with the following information for all of the players:
+Player’s Name, Player’s State, Total Number of Points, Player’s Pre-Rating, and Average Pre Chess Rating of Opponents
+For the first player, the information would be:
+Gary Hua, ON, 6.0, 1794, 1605
+
+
+## Loading and Reading the Data
+Firstly, I download the lirbaries needed to manipulate the file and data. Next, I go through the data to understand the format.
+
+```{r cars}
+library(readr)
+library(stringr)
+theUrl <- 'https://raw.githubusercontent.com/dcorrea614/MSDS/master/tournamentinfo.txt'
+
+dfTournament <- read_csv(file = theUrl,col_names = FALSE)
+head(dfTournament)
+tail(dfTournament)
+```
+
+## Deconstructing the Data
+
+Here, I notice the pattern of where the data is stored.  The first 4 lines are not part of the dataset.  It is followed by player information and games played, repeating after every 3 lines.  I, then, seperate to 2 matrices to resemble a more tradition data set.
+
+```{r}
+mTournament <- matrix(unlist(dfTournament), byrow=TRUE)
+head(mTournament)
+m1 <- mTournament[seq(5,length(mTournament),3)]
+head(m1)
+
+m2 <- mTournament[seq(6,length(mTournament),3)]
+head(m2)
+```
+
+## Capturing the Data
+
+The next step is to capture the feature values in vectors using string manipulation and regular expressions.  All the features can be captured by standard extraction, besides the Average Pre Chess Rating of Opponents.
+
+```{r warning=FALSE}
+ID <- as.numeric(str_extract(m1, '\\d+'))
+Name <- str_extract(m1, '[A-z]{2,}\\s[A-z]{2,}')
+State <- str_extract(m2, '[A-Z]{2}')
+TotalNumberofPoints <- as.numeric(str_extract(m1, '\\d+.\\d+'))
+PreRating <- str_extract(m2, 'R:.{8,}-')
+PreRating <- as.numeric(str_extract(PreRating, '\\d{3,4}'))
+Rounds <- str_extract_all(m1, '[A-Z]\\s{2,}\\d+')
+Rounds <- str_extract_all(Rounds, '\\d+')
+
+```
+
+## Calculating Average Pre Chess Rating of Opponents
+
+Using two vectors from the previous step, I am able to calculate the Average Pre Chess Rating of Opponents using a loop.
+
+```{r}
+OpponentsAvgPreChessRating <- c()
+
+for(i in c(1:length(Rounds))){
+  OpponentsAvgPreChessRating[i] <-round(mean(PreRating[as.numeric(Rounds[[i]])]),0)
+}
+OpponentsAvgPreChessRating
+
+```
+
+## Constructing the Data Frame
+
+```{r}
+Project1 <- data.frame(ID,Name,State,TotalNumberofPoints,PreRating,OpponentsAvgPreChessRating)
+
+head(Project1)
+
+
+```
+
+## Writing the CSV File
+
+```{r}
+#write_csv(Project1,path='C:/Users/gerso/Documents/DATA-607/tournament.csv')
+```
+
