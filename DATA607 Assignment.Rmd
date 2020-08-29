@@ -1,0 +1,117 @@
+---
+title: "DATA607-Assignment 1"
+author: "Diego Correa"
+date: "8/28/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+
+```{r}
+library(readr)
+library(stringr)
+library(ggplot2)
+```
+
+## Including Plots
+
+Loading file and create data frame
+
+```{r}
+theUrl <- 'https://raw.githubusercontent.com/fivethirtyeight/data/4a989f20bc0a44ed990cb9ca0be20d06b095145c/covid-geography/mmsa-icu-beds.csv'
+dfCovidOriginal <- read_delim(file=theUrl, delim=',')
+```
+
+Look at data
+
+```{r}
+head(dfCovidOriginal)
+summary(dfCovidOriginal)
+```
+
+
+look at the ratio between total at risk and icu beds
+```{r}
+ggplot(data=dfCovidOriginal) +
+  geom_point(mapping=aes(x=icu_beds,y=total_at_risk)) +
+  geom_smooth(mapping=aes(x=icu_beds,y=total_at_risk))
+```
+
+break up data to separate the MMSA column to obtain the county and state
+
+```{r}
+location <- str_split(string=dfCovidOriginal$MMSA, pattern=', ')
+mLocation <- data.frame(Reduce(rbind, location))
+head(mLocation)
+names(mLocation) <- c('County','State')
+row.names(mLocation) <- NULL
+```
+
+combine the county and state columns to data frame
+
+```{r}
+dfCovid <- cbind(mLocation,dfCovidOriginal)
+dfCovid$total_percent_at_risk <- parse_number(dfCovid$total_percent_at_risk)
+dfCovid$total_percent_at_risk
+head(dfCovid)
+```
+
+load libraries to aggregate data
+
+```{r}
+library(magrittr)
+library(dplyr)
+```
+
+aggregate the total high risk per ICU bed by state
+
+```{r}
+dfICU <- dfCovid %>% 
+  group_by(State) %>% 
+  summarize(totalHighRiskPerICUBed=sum(high_risk_per_ICU_bed)) %>% 
+  arrange(desc(totalHighRiskPerICUBed))
+```
+
+aggregate the total at risk by state
+```{r}
+dfAtRisk <- dfCovid %>% 
+  group_by(State) %>% 
+  summarize(totalAtRisk=sum(total_at_risk)) %>% 
+  arrange(desc(totalAtRisk)
+```
+
+join the tables on state
+
+```{r}
+dfCovid2 <- merge(dfICU,dfAtRisk, by.x='State', by.y='State')
+dfCovid2 <- dfCovid2[order(-dfCovid2$totalHighRiskPerICUBed),]
+head(dfCovid2)
+```
+
+look at top States with total high risk per ICU bed by state
+
+```{r}
+dfTopCovidStates <- dfCovid2[1:10,]
+row.names(dfTopCovidStates) <- NULL
+
+```
+
+look at data
+```{r}
+dfTopCovidStates
+ggplot(data=dfTopCovidStates) + 
+  geom_bar(mapping=aes(x=State, y=totalAtRisk), stat='identity',fill='#f68060') +
+  coord_flip()
+
+ggplot(data=dfTopCovidStates) + 
+  geom_bar(mapping=aes(x=State, y=totalHighRiskPerICUBed), stat='identity',fill='#f68060') +
+  coord_flip()
+```
