@@ -1,0 +1,31 @@
+﻿RatingID,FriendsID,Movie,Rating
+1,1,Ford v Ferrari,3
+2,1,The Irishman,
+3,1,Jojo Rabbit,5
+4,1,Joker,5
+5,1,Marriage Story,4
+6,1,Parasite,
+7,2,Ford v Ferrari,3
+8,2,The Irishman,
+9,2,Jojo Rabbit,5
+10,2,Joker,5
+11,2,Marriage Story,4
+12,2,Parasite,4
+13,3,Ford v Ferrari,3
+14,3,The Irishman,
+15,3,Jojo Rabbit,5
+16,3,Joker,5
+17,3,Marriage Story,
+18,3,Parasite,2
+19,4,Ford v Ferrari,5
+20,4,The Irishman,3
+21,4,Jojo Rabbit,4
+22,4,Joker,4
+23,4,Marriage Story,5
+24,4,Parasite,4
+25,5,Ford v Ferrari,
+26,5,The Irishman,
+27,5,Jojo Rabbit,5
+28,5,Joker,5
+29,5,Marriage Story,
+30,5,Parasite,3
