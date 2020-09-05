@@ -1,0 +1,96 @@
+---
+title: "DATA607-Assignment2"
+author: "Diego Correa"
+date: "9/3/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Introduction
+
+Choose six recent popular movies. Ask at least five people that you know (friends, 
+family, classmates, imaginary friends if necessary) to rate each of these movies 
+that they have seen on a scale of 1 to 5. Take the results (observations) and 
+store them in a SQL database of your choosing. Load the information from the SQL
+database into an R dataframe.
+
+Pior to created code, I created 2 CSV files and uploaded them into GitHub.  
+Additionally, I created and connected to a cloud-based database.
+
+In the below code, I first captured the data on CSV files into dataframes. 
+Followed by establishing a connection to a dattabase. I, then, queried the tables 
+and saved the results to a dataframe.  Lastly, I performed analyses on the results.
+
+
+## Connecting to Data
+
+Here, I loaded the readr package to read the csv files on GitHub and saved them 
+to dataframes.
+
+```{r}
+library(readr)
+
+friendsUrl <- 'https://raw.githubusercontent.com/dcorrea614/MSDS/master/assignment2%20-%20friends.csv'
+ratingURL <- 'https://raw.githubusercontent.com/dcorrea614/MSDS/master/assignment2%20-%20rating.csv'
+
+dfFriends <- read_csv(file = friendsUrl)
+dfRating <- read_csv(file = ratingURL)
+
+dfFriends
+dfRating
+```
+
+## Connecting to Database
+
+To connect to the cloud based database, I used the RMySQL package.
+
+```{r}
+library(RMySQL)
+con <- dbConnect(MySQL(),
+                 user = 'root',
+                 host = '34.122.92.218',
+                 dbname = 'DATA607')
+
+summary(con)
+```
+
+## Creating Tables
+
+Dumping the dataframes into tables.
+
+```{r}
+dbWriteTable(con, 'friends', dfFriends, overwrite = TRUE)
+dbWriteTable(con, 'rating', dfRating, overwrite = TRUE)
+```
+
+## Query Table
+
+Query the tables and joined on FriendsID.
+
+```{r}
+res <- dbGetQuery(con, 'select concat(FirstName, " ", LastName) as Friend, Movie, Rating 
+                  from rating inner join friends on rating.FriendsID = friends.FriendsID;')
+res
+```
+
+## Analyze Results
+
+Using the psych package, we are able to see summary statics of the Rating, grouped by Movie.
+
+Finally, I used the ggplot package to visually see the ratings by Movie.
+
+```{r}
+library(psych)
+describeBy(res$Rating, group = res$Movie)
+
+library(ggplot2)
+ggplot(res, aes(x = Rating)) + geom_histogram(fill = 'blue', binwidth = 1) + 
+  facet_wrap(~Movie)
+
+```
+
+## Conclusion
+
+Based on the info, Jojo Rabbit and Joker have the highest average ratings, while 
+The Irishman received the worst.
