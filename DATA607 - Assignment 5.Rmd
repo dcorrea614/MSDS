@@ -1,0 +1,141 @@
+---
+title: "DATA607 - Assignment 5"
+author: "Diego Correa"
+date: "9/26/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+1. Create a .CSV file (or optionally, a MySQL database!) that includes all of the information above. You’re encouraged to use a “wide” structure similar to how the information appears above, so that you can practice tidying and transformations as described below.
+2. Read the information from your .CSV file into R, and use tidyr and dplyr as needed to tidy and transform your data. 
+3. Perform analysis to compare the arrival delays for the two airlines.
+4. Your code should be in an R Markdown file, posted to rpubs.com, and should include narrative descriptions of your data cleanup work, analysis, and conclusions.
+
+
+My approach for this assignment is:
+  * Gather the data from the CSV file found on GitHub.
+  * Clean and transform data
+  * Perform analysis of the Airlines and Cities
+
+
+## Gather Data
+
+```{r include=FALSE}
+library(tidyverse, quietly = TRUE)
+
+url <- 'https://github.com/dcorrea614/MSDS/raw/master/Assign5%20-%20flights.csv'
+dfFlights <- read.csv(url)
+```
+
+## Cleaning the Data
+
+```{r}
+dfFlights <- dfFlights %>%
+  rename(Airline = ï.., Status = X, 'Los Angeles' = Los.Angeles, 'San Diego' = San.Diego, 
+          'San Francisco' = San.Francisco)
+
+colnames(dfFlights)
+```
+Handling the data
+
+```{r}
+# removing the empty row
+dfFlights <- dfFlights[-3,]
+
+# Entering missing data inputs
+dfFlights[2,1] <- 'Alaska'
+dfFlights[4,1] <- 'AM West'
+
+# formatting the data from char to int
+dfFlights <- dfFlights %>% 
+  mutate(Phoenix = as.integer(str_remove(Phoenix, ',')))
+
+dfFlights <- dfFlights %>% 
+  mutate(Seattle = as.integer(str_remove(Seattle, ',')))
+
+dfFlights
+```
+## Transforming the Data
+
+In order to perform the analysis, I needed to pivot the original data to calculate ratios.
+
+
+```{r}
+# Pivoting the Alaska Airline rows
+dfAlaska <- dfFlights[1:2,-1] %>% 
+  pivot_longer(!Status, names_to = 'City', values_to = 'count') %>%
+  pivot_wider(names_from = Status, values_from = count)
+
+dfAlaska['Airline'] <- 'Alaska'
+
+# Pivoting the AM West Airline rows
+dfAMWest <- dfFlights[3:4,-1] %>% 
+  pivot_longer(!Status, names_to = 'City', values_to = 'count') %>%
+  pivot_wider(names_from = Status, values_from = count)
+
+dfAMWest['Airline'] <- 'AM West'
+
+# Combining the two data frames
+df1 <- rbind(dfAlaska, dfAMWest)
+
+df1 <- df1 %>%
+  rename(on_time = 'on time')
+
+df1 <- df1 %>%
+  select(Airline, City, on_time, delayed)
+
+# Calculating ratios
+df1['on_time_ratio'] <- df1['on_time'] / (df1['delayed'] + df1['on_time'])
+df1['delayed_ratio'] <- df1['delayed'] / (df1['delayed'] + df1['on_time'])
+
+df1 <- df1 %>%
+  select(Airline, City, on_time, delayed, on_time_ratio, delayed_ratio)
+
+df1
+```
+
+## Performing Analyses of Total Amounts
+
+
+
+```{r}
+ggplot(data = df1) + 
+  geom_bar(mapping = aes(x = Airline, y = on_time, fill = 'on_time'), stat = 'identity') +
+  geom_bar(mapping = aes(x = Airline, y = delayed, fill = 'delayed'), stat = 'identity') + 
+  ylab('counts')
+
+ggplot(data = df1) + 
+  geom_bar(mapping = aes(x = City, y = on_time, fill = Airline), stat = 'identity', position = 'dodge') +
+  coord_flip()
+```
+
+## Performing Analysis on Ratios
+
+```{r}
+ggplot(data = df1) + 
+  geom_bar(mapping = aes(x = City, y = delayed_ratio, fill = Airline), stat = 'identity', position = 'dodge') + 
+  coord_flip()
+
+ggplot(data = df1) + 
+  geom_bar(mapping = aes(x = City, y = on_time_ratio, fill = Airline), stat = 'identity', position = 'dodge') + 
+  coord_flip()
+```
+
+### Total Delayed vs Delayed Ratio
+
+```{r}
+ggplot(data = df1, mapping = aes(x = delayed, y = delayed_ratio, color = Airline, label = City)) + 
+  geom_point() +
+  geom_text() +
+  geom_smooth(method=lm, aes(fill = Airline))
+```
+
+## Conclusion
+
+This last graph illustrates that for areas AM West has higher total delayed flights, they have a lower delayed ratio. The inverse is true for Alaska, where the higher total delayed flights have the higher delayed ratio.
+
