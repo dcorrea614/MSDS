@@ -1,0 +1,263 @@
+---
+title: "DATA 607 - Project 2"
+author: "Diego Correa"
+date: "10/2/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Introduction
+
+The goal of this assignment is to give you practice in preparing different datasets for downstream analysis work.
+
+We are asked to choose three datasets from Week 5's Discussion, transform the data, perform analysis, and have a conclusion.
+
+## NYC Subway Ridership from 2013
+
+Cameron Smith provided this example where he suggests to analyze change in ridership by borough from year to next.
+
+The data is found [here](http://web.mta.info/nyct/facts/ridership/ridership_sub_annual.htm).  I entered the data into a CSV file using Excel's Get Data method, where it can extract data tables from a website.
+
+### Loading
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
+```{r}
+url <- 'https://github.com/dcorrea614/MSDS/raw/master/Annual%20Subway%20Ridership.csv'
+
+dfMTA <- read.csv(file = url)
+
+str(dfMTA)
+```
+
+Taking a look inside the data, columns have extra characters, and all the numeric values are stored as characters that include commas.  Additionally, the dataset is separated by boroughs and the borough names are entered as rows.  We need to identify where each borough begins and ends.
+
+### Cleaning/Transforming Data
+
+```{r}
+# changing the column names
+new_col_name <- c('Station', 2013, 2014, 2015, 2016, 2017, 2018, '2017 - 2018 Net Change', 
+                   '2017 - 2018 % Change', '2018 Rank')
+colnames(dfMTA) <- new_col_name
+
+# finding the rows where the boroughs are entered
+borough <- c('The Bronx', 'Brooklyn', 'Manhattan', 'Queens')
+
+rowvalues <- c()
+
+for(i in 1:length(borough)){
+  rowvalues[i] <- rownames(dfMTA[which(dfMTA$'2013' == borough[i]),])
+}
+rowvalues
+
+#now that we now where the boroughs dataset begins and ends, we can capture the 
+# data accordingly
+dfBronx <- dfMTA[2:69,]
+dfBronx['Borough'] <- borough[1]
+  
+dfBrooklyn <- dfMTA[71:227,]
+dfBrooklyn['Borough'] <- borough[2]
+
+dfManhattan <- dfMTA[229:349,]
+dfManhattan['Borough'] <- borough[3]
+
+dfQueens <- dfMTA[351:dim(dfMTA)[1],]
+dfQueens['Borough'] <- borough[4]
+
+# combined all sub datasets
+dfMTA2 <- rbind(dfBronx, dfBrooklyn, dfManhattan, dfQueens)
+
+# changed the columns from character to integer and removing commas
+dfMTA2 <- dfMTA2 %>%
+  mutate('2013' = as.integer(str_remove_all(dfMTA2$'2013', ',')),
+         '2014' = as.integer(str_remove_all(dfMTA2$'2014', ',')),
+         '2015' = as.integer(str_remove_all(dfMTA2$'2015', ',')),
+         '2016' = as.integer(str_remove_all(dfMTA2$'2016', ',')),
+         '2017' = as.integer(str_remove_all(dfMTA2$'2017', ',')),
+         '2018' = as.integer(str_remove_all(dfMTA2$'2018', ',')),
+         '2017 - 2018 Net Change' = as.integer(str_remove_all(dfMTA2$'2017 - 2018 Net Change', ',')),
+         '2017 - 2018 % Change' = as.numeric(str_remove_all(dfMTA2$'2017 - 2018 % Change', '%')),
+         '2018 Rank' = as.integer(dfMTA2$'2018 Rank')) %>%
+  select(Borough, colnames(dfMTA2))
+
+```
+### Analysis 
+
+The data is now cleaned and we can look at the ridership by borough.
+
+```{r}
+# subset of the data we want to look at
+colnames2 <- c('Borough', 2013, 2014, 2015, 2016, 2017, 2018)
+  
+dfMTA3 <- dfMTA2 %>%
+  select(colnames2)
+
+aggMTA <- dfMTA3 %>%
+  pivot_longer(!Borough, names_to = 'Year', values_to = 'Ridership') %>%
+  group_by(Borough, Year) %>%
+  summarize(Avg_Ridership = mean(Ridership, na.rm = TRUE))
+
+ggplot(data = aggMTA) +
+  geom_bar(mapping = aes(x = Year, y = Avg_Ridership, fill = Borough), stat = 'identity') +
+  facet_grid(~ Borough) +
+  theme(axis.text.x = element_text(angle = 70, hjust = 1)) +
+  labs(title = 'Average Riderhip from 2013 - 2018 by Borough')
+```
+
+### Conclusion
+
+From our analysis, ridership by borough has not changed much from 2013 - 2018. Additionally, the data shows that Queens as far more riders than any other borough.
+
+
+## School Diversity
+
+Zhouxin Shi provided this example where he suggests to filter out all schools with a population of less than 100, since any school with a small population may distort our next calculation.  Then to calculate the racial average for each school in each state and put into a separate table
+
+
+### Loading
+
+```{r}
+url <- 'https://github.com/dcorrea614/MSDS/raw/master/school_diversity.csv'
+
+dfSchool <- read.csv(file = url)
+str(dfSchool)
+```
+### Cleaning/Transforming Data
+
+Here we see that the numeric data is currently stored as numeric. To complete the analysis, we need to filter out some of the columns and rows.
+
+Additionally, we are assuming that any NA value in the Racial Percentage is 0.
+
+```{r}
+# we are interested in getting the counts of the students' race
+dfSchool2 <- dfSchool %>%
+  mutate_all(~replace(., is.na(.), 0)) %>%
+  filter(Total > 100) %>%
+  mutate(Asian_Pop = Asian / 100 * Total,
+         Black_Pop = Black / 100 * Total,
+         Hispanic_Pop = Hispanic / 100 * Total,
+         White_Pop = White / 100 * Total,
+         Multi_Pop = Multi / 100 * Total,
+         ) %>%
+  group_by(LEA_NAME, ST) %>%
+  summarize(Asian = mean(Asian_Pop),
+            Black = mean(Black_Pop),
+            Hispanic = mean(Hispanic_Pop),
+            White = mean(White_Pop),
+            Multi = mean(Multi_Pop)
+            )
+
+head(dfSchool2)
+```
+### Analysis
+
+The above data frame contains the requested analysis which was to "calculate the racial average for each school in each state and put into a separate table".
+
+Since the spread is very wide I believe it is best to compare the Race ratioin schools.
+
+```{r warning=FALSE}
+dfSchool4 <- dfSchool %>%
+  mutate_all(~replace(., is.na(.), 0)) %>%
+  filter(Total > 100) %>%
+  mutate(Asian = Asian / 100,
+         Black = Black / 100,
+         Hispanic = Hispanic / 100,
+         White = White / 100,
+         Multi = Multi / 100,
+         ) %>%
+  group_by(ST) %>%
+  summarize(Asian = mean(Asian),
+            Black = mean(Black),
+            Hispanic = mean(Hispanic),
+            White = mean(White),
+            Multi = mean(Multi)) %>%
+  pivot_longer(!ST, names_to = 'Ethnicity', values_to = 'Ratio')
+
+ggplot(data = dfSchool4, aes(x = Ethnicity, y = Ratio, fill = Ethnicity)) +
+  geom_boxplot() +
+  labs(title = 'Ethnicity Ratio Distribution in Schools')
+
+```
+
+
+### Conclusion
+From our analysis, we see that the overall the spread of White student ratio is the highest by a wide margin, where the other race ratios are more comparable.
+
+## Streaming Movies
+
+Orli Khaimova provided this example where she suggests to analyze which streaming platform has better movies.  The CSV was found on Kaggle.
+
+### Loading 
+
+```{r}
+url <- 'https://github.com/dcorrea614/MSDS/raw/master/MoviesOnStreamingPlatforms_updated.csv'
+
+dfMovies <- read.csv(file = url)
+str(dfMovies)
+```
+
+### Cleaning/Transforming
+
+By looking at the data we see that the first column is not needed, the Rotten Tomatoes rating is saved as a character and has a % symbol, and there are "." in some of the column names.
+
+
+```{r}
+# Cleaning
+dfMovies <- dfMovies[,-1] %>%
+  rename(Rotten_Tomatoes = Rotten.Tomatoes, Prime_Video = Prime.Video, Disney = Disney.) %>%
+  mutate(Rotten_Tomatoes = as.integer(str_remove(Rotten_Tomatoes, '%')))
+
+# Transforming - we need to identify the platforms where the movies can be streamed.
+# I created a subset for each platform and then combined them after
+dfNetflix <- dfMovies %>%
+  filter(Netflix == 1) %>%
+  select(Title, IMDb, Rotten_Tomatoes)
+dfNetflix['Platform'] <- 'Netflix'
+
+dfHulu <- dfMovies %>%
+  filter(Hulu == 1) %>%
+  select(Title, IMDb, Rotten_Tomatoes)
+dfHulu['Platform'] <- 'Hulu'
+
+dfPrime_Video <- dfMovies %>%
+  filter(Prime_Video == 1) %>%
+  select(Title, IMDb, Rotten_Tomatoes)
+dfPrime_Video['Platform'] <- 'Prime_Video'
+
+dfDisney <- dfMovies %>%
+  filter(Disney == 1) %>%
+  select(Title, IMDb, Rotten_Tomatoes)
+dfDisney['Platform'] <- 'Disney'
+
+dfMovies2 <- rbind(dfNetflix, dfHulu, dfPrime_Video, dfDisney)
+
+```
+
+### Analysis
+
+The data is now cleaned and can be compared.
+
+```{r}
+ggplot(data = dfMovies2, aes(x = Platform, y = IMDb, fill = Platform)) +
+  geom_boxplot() + 
+  labs(title = 'IMDb Rating by Platform') 
+
+ggplot(data = dfMovies2, aes(x = Platform, y = Rotten_Tomatoes, fill = Platform)) +
+  geom_boxplot() + 
+  labs(title = 'Rotten Tomoatoes Rating by Platform') 
+# There are 11895 Rotten Tomatoes Values that are NA
+```
+
+### Conclusion
+By comparing the platforms by Rotten Tomatoes rating, we see that 11895 out of 17381 rows have NA values, where IMDb is missing only 576 rows.  I recommend to only compare the platforms based on the IMDb rating.  The graph suggest that the Disney platform has the highest IMDb rated movies and Prime Video has the lowest.
+
+## References
+
+"Annual Subway Ridership", http://web.mta.info/nyct/facts/ridership/ridership_sub_annual.htm
+
+https://raw.githubusercontent.com/szx868/data607/master/school_diversity.csv (refernce not provided)
+
+Ruchi Bhatia."Movies on Netflix, Prime Video, Hulu and Disney+", https://www.kaggle.com/ruchi798/movies-on-netflix-prime-video-hulu-and-disney
