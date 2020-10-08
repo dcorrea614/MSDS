@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!DOCTYPE movies>
+<movie mins="126" lang="en">
+	<!-- this is a comment -->
+	<title>Good Will Hunting</title>
+	<director>
+		<first_name>Gus</first_name>
+		<last_name>Van Stant</last_name>
+	</director>
+	<year>1998</year>
+	<genre>drama</genre>
+</movie>
