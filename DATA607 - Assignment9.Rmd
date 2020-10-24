@@ -1,0 +1,96 @@
+---
+title: "DATA607 - Assingment9"
+author: "Diego Correa"
+date: "10/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+The New York Times web site provides a rich set of APIs, as described here: https://developer.nytimes.com/apis
+You’ll need to start by signing up for an API key.
+Your task is to choose one of the New York Times APIs, construct an interface in R to read in the JSON data, and transform it into an R DataFrame.
+
+I started by creating an account using the above link.  Next, I set up a key and familiarized myself with the API documentation.  Once I was able to access the API through R, I separated the data, transformed, then combined it back together.
+
+##Libraries
+
+```{r include=FALSE}
+library(httr)
+library(jsonlite)
+library(tidyverse)
+```
+
+
+## Accessing API
+
+```{r}
+url <- 'https://api.nytimes.com/svc/movies/v2/reviews/all.json'
+key <- 'GAC1iHZlrjry6V65NHG3DGtCkCOCiikh'
+
+movie_review_data <- GET(url, query = list('api-key' = key))
+movie_review_content <- content(movie_review_data, 'text')
+
+movie_review_content <- fromJSON(movie_review_content)
+
+# names of the arrays from the API call
+(c_names <- names(movie_review_content))
+```
+## Viewing the Data Stored
+
+We see that within the JSON file, there are five arrays of data.  Let's see what is in each one of the arrays and transform the data that we want into a data frame
+
+```{r}
+df1 <- movie_review_content[c_names[1]]
+str(df1)
+
+df2 <- movie_review_content[c_names[2]]
+str(df2)
+
+df3 <- movie_review_content[c_names[3]]
+str(df3)
+
+df4 <- movie_review_content[c_names[4]]
+str(df4)
+
+df5 <- movie_review_content[c_names[5]]
+str(df5)
+```
+## Transforming Dataframes
+
+The variable df5 is the winner, however, "link" and "multimedia" are saved as data frames. We need to separate these data frames, transform them, then bind them together. 
+
+```{r}
+# we see that the first nine column names have the prefix of "results."
+results_df <- as.data.frame(df5)
+results_df <- results_df[1:9]
+
+# transforming column names
+c_names <- colnames(results_df) %>%
+  str_replace('results.', '')
+
+#  replace the column names
+(colnames(results_df) <- c_names)
+
+link_df <- df5$results$link %>%
+  as.data.frame()
+
+multimedia_df <- df5$results$multimedia %>%
+  as.data.frame()
+```
+## Combining the Data into a Data Frame
+
+Finally, we can combine our results together into one data frame.
+
+```{r}
+movie_df <- cbind(results_df, link_df, multimedia_df)
+str(movie_df)
+```
+
+## Conclusion
+
+We see that the data stored in the link and mulitmedia data frames are redudant and not needed.
+The information found in the results data frame holds information that is easier to read and understand.
