@@ -1,0 +1,369 @@
+---
+title: "DATA607 - Assignment 10"
+author: "Diego Correa"
+date: "10/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+In this assignment, you should start by getting the primary example code from chapter 2 working in an R Markdown document.  You should provide a citation to this base code.
+You’re then asked to extend the code in two ways:
+1. Work with a different corpus of your choosing, and
+2. Incorporate at least one additional sentiment lexicon 
+
+### Part 1
+
+####Loading Libraries and sentiments
+
+```{r include=FALSE}
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+library(tidytext)
+library(textdata)
+library(tidyr)
+library(ggplot2)
+library(wordcloud)
+library(reshape2)
+library(gutenbergr)
+library(syuzhet)
+
+get_sentiments("afinn")
+get_sentiments("bing")
+get_sentiments("nrc")
+```
+
+
+#### Tokenization of Books
+
+
+```{r}
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]",
+      ignore_case = TRUE
+    )))
+  ) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+```
+
+
+#### Joining on Joy Sentiments
+
+```{r}
+nrc_joy <- get_sentiments("nrc") %>%
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+```
+#### Finding Sentiment using Bing Sentiment Lexicon
+
+```{r}
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+```
+#### Graphing Sentiments by Book
+
+```{r}
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+```
+
+
+### Comparing the three sentiment dictionaries
+
+```{r}
+pride_prejudice <- tidy_books %>%
+  filter(book == "Pride & Prejudice")
+```
+
+#### Finding Sentiments Based on Each Method
+
+```{r}
+afinn <- pride_prejudice %>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(index = linenumber %/% 80) %>%
+  summarise(sentiment = sum(value)) %>%
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>%
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>%
+    inner_join(get_sentiments("nrc") %>%
+      filter(sentiment %in% c(
+        "positive",
+        "negative"
+      ))) %>%
+    mutate(method = "NRC")
+) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+```
+#### Graphing the Sentiments of Each
+
+
+```{r}
+bind_rows(
+  afinn,
+  bing_and_nrc
+) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+```{r}
+get_sentiments("nrc") %>%
+  filter(sentiment %in% c(
+    "positive",
+    "negative"
+  )) %>%
+  count(sentiment)
+
+get_sentiments("bing") %>%
+  count(sentiment)
+```
+
+
+### Most common positive and negative words
+
+
+```{r}
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts
+```
+
+
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(
+    y = "Contribution to sentiment",
+    x = NULL
+  ) +
+  coord_flip()
+```
+
+#### Adding to Stop Words
+
+
+```{r}
+custom_stop_words <- bind_rows(
+  tibble(
+    word = c("miss"),
+    lexicon = c("custom")
+  ),
+  stop_words
+)
+
+custom_stop_words
+```
+
+### Wordclouds
+
+```{r}
+tidy_books %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+
+
+
+```{r}
+tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(
+    colors = c("gray20", "gray80"),
+    max.words = 100
+  )
+```
+
+### Looking at units beyond just words
+
+
+```{r}
+PandP_sentences <- tibble(text = prideprejudice) %>%
+  unnest_tokens(sentence, text, token = "sentences")
+```
+
+
+
+
+```{r}
+austen_chapters <- austen_books() %>%
+  group_by(book) %>%
+  unnest_tokens(chapter, text,
+    token = "regex",
+    pattern = "Chapter|CHAPTER [\\dIVXLC]"
+  ) %>%
+  ungroup()
+
+austen_chapters %>%
+  group_by(book) %>%
+  summarise(chapters = n())
+```
+
+
+
+
+```{r}
+bingnegative <- get_sentiments("bing") %>%
+  filter(sentiment == "negative")
+
+wordcounts <- tidy_books %>%
+  group_by(book, chapter) %>%
+  summarize(words = n())
+
+tidy_books %>%
+  semi_join(bingnegative) %>%
+  group_by(book, chapter) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("book", "chapter")) %>%
+  mutate(ratio = negativewords / words) %>%
+  filter(chapter != 0) %>%
+  top_n(1) %>%
+  ungroup()
+```
+
+
+
+## Part 2
+
+### Transforming the Data Frame
+
+```{r}
+# loading book
+dorian <- gutenberg_works(title == 'The Picture of Dorian Gray')
+dorian_corpus <- gutenberg_download(dorian$gutenberg_id)
+
+# creating a data frame by tokenization of chapters, paragraphs, and words
+dc <- dorian_corpus %>%
+  mutate(
+    chapter_num = cumsum(str_detect(text, regex('^chapter [0-9]+', ignore_case = TRUE)))
+  ) %>%
+  filter(chapter_num != 0) %>%
+  unnest_tokens(chapter, text, token = 'regex', pattern = 'CHAPTER [0-9]+') %>%
+  unnest_tokens(paragraph, chapter, token = 'paragraphs') %>%
+  group_by(chapter_num) %>%
+  mutate(paragraph_num = 1:n()) %>%
+  ungroup() %>%
+  unnest_tokens(word, paragraph) %>%
+  anti_join(stop_words)
+```
+### Exploratory
+
+```{r}
+# Words by Chapter
+dc %>% 
+  group_by(chapter_num) %>%
+  count(word, sort = TRUE) %>%
+  mutate(chapter_num = reorder(chapter_num, n)) %>%
+  ggplot(aes(chapter_num, n)) +
+  geom_col(fill = 'steel blue') +
+  ylab('Word Count') +
+  coord_flip()
+
+
+# Top 10 words in book
+dc %>% 
+  count(word, sort = TRUE) %>%
+  top_n(10) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word,n)) +
+  geom_col(fill = 'steel blue') +
+  ylab('Word Count') +
+  coord_flip()
+
+
+# Top words by chapter
+dc %>% 
+  group_by(chapter_num) %>%
+  count(word) %>%
+  top_n(1) %>%
+  ungroup() %>%
+  arrange(chapter_num)
+```
+
+
+### Finding Sentiments
+
+```{r}
+# getting sentiment of words storing as vector using syuzhet lexicon
+sentiment_vector <- get_sentiment(dc$word, method = 'syuzhet')
+
+dc <- cbind(dc, sentiment_vector)
+
+# calculating sentiment by paragraph
+dc_sent_para <- dc %>%
+  group_by(chapter_num, paragraph_num) %>%
+  summarize(sentiment = sum(sentiment_vector)) 
+```
+
+### Analysis
+
+```{r}
+# now the time that we've been waiting for
+# graph using syuzhet lexicon
+ggplot(data = dc_sent_para, aes(paragraph_num, sentiment, fill = chapter_num)) + 
+  geom_col() + 
+  facet_wrap(~ chapter_num)
+
+# graph of proportion of positive and negative paragraphs
+dc_sent_para %>%
+  mutate(sentiment2 = ifelse(sentiment >= 0, 'positve', 'negative')) %>%
+  group_by(sentiment2) %>%
+  summarize(n = n()) %>%
+  mutate(freq = round(n / sum(n),2)) %>%
+  ggplot(aes(x = sentiment2, y = freq)) +
+  geom_col(fill = 'steelblue') +
+  geom_text(aes(label = freq), vjust = 2, color = 'white', size = 5)
+
+
+# wordcloud using loughran lexicon
+dc %>%
+  inner_join(get_sentiments('loughran')) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = 'n', fill = 0) %>%
+  comparison.cloud(
+    colors = c("gray20", "gray80"),
+    max.words = 100
+  )
+```
+
+
+### Conclusion
+
+"The Picture of Dorian Gray" has almost the equal amounts of positive and negative sentiment paragraphs.  What is surprising is that the last chapter of the book contains almost only negative sentiment paragraphs.
