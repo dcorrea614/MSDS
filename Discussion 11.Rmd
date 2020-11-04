@@ -1,0 +1,40 @@
+---
+title: "Discussion 11"
+author: "Diego Correa"
+date: "11/4/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Scenario Design Analysis
+
+### Who are the target users?
+
+The target users are the customers of their subscription.
+
+### What are their key goals
+
+Create a user experience that will seek to improve retention rate.
+
+### How can you help them accompish those goals
+
+Increase the rate at which stream time is increased by the recommender system. 
+
+### Times Performed
+
+It does not makes sense to perform the scenario design analysis twice as their platform has a clear goal, which is to retain customers.
+
+## Reverse Engineer
+
+Netflix uses a two-tiered ranking system, where ranking occurs within each row and across the rows.  
+The ranking is done by three algorithms. Firslty, a Personalised Video Ranking (PVR) algorithm that filters down the catalog by criteria.  Secondly, a Top-N Video Ranker algorithm that ranks the head of the catalog.  Lastly, a Trending Now Ranker algorithm that captures temporal trends.
+
+## Recommendations for a Recommender System
+
+An interesting feature could being able to add friends on your Netflix account and see they are
+watching and their recommendations.  I believe this would also contribute to a higher rentention rate.
