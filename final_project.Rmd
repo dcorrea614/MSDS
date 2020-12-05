@@ -1,0 +1,348 @@
+---
+title: "Speed Reducer Tracing System"
+author: "Diego Correa"
+date: "12/2/2020"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Introduction
+
+Speed humps are traffic calming devices intended to slow traffic speeds on low volume, low speed roads. Speed humps are generally installed on local residential (non-truck route, non-bus route locations), while speed cushions are generally installed on designated truck route locations and bus route locations.
+
+Intuitively, I suspect that the speed reducers would have a strong relationship with accidents (Why else to slow down traffic in a city notoriously known for traffic).  Luckily, NYC provides these data sets openly.
+
+In my analysis I will look at these data sets individually and then see if the installed speed reducers have a relationship to accidents in NYC.
+
+
+## Loading Data
+
+```{r include=FALSE}
+library(dplyr)
+library(leaflet)
+library(tidyverse)
+library(wordcloud)
+library(tidytext)
+library(rgdal)
+library(maptools)
+library(revgeo)
+library(lubridate)
+library(httr)
+library(tigris)
+library(RSocrata)
+```
+
+### Reading The Speed Reducer Dataset
+
+```{r}
+speed_reducer_url <- 'https://github.com/dcorrea614/MSDS/blob/master/Speed_Reducer_Tracking_System__SRTS_.csv?raw=true'
+
+speed_reducer <- read.csv(speed_reducer_url)
+
+str(speed_reducer)
+```
+
+### API Connection to get the Accidet Data
+
+```{r}
+df <- read.socrata(
+  'https://data.cityofnewyork.us/resource/h9gi-nx95.json',
+  app_token = 'zldDi07wqx4G9fo7G6Hno9m3g',
+  email     = 'dcorrea614@gmail.com',
+  password  = 'Astoria.91'
+)
+
+accidents <- df
+
+str(accidents)
+```
+
+
+## Transforming
+
+### Speed Reducer Data Set
+
+The transformation needed in this data set includes converting the date from a character data type to formatting it to a standard date type and creating a column that identifies the speed reducers that were either installed or not installed.
+
+```{r}
+sr_df <- speed_reducer %>%
+  select(ProjectCode, Borough, Description, ProjectStatus, speedCushion, InstallationDate, 
+         RequestDate, FromLongitude, FromLatitude, TrafficDirectionDesc) %>%
+  mutate(InstallationDate = mdy(str_extract(InstallationDate, '[0-9]+/[0-9]+/[0-9]+')),
+          RequestDate = mdy(str_extract(RequestDate, '[0-9]+/[0-9]+/[0-9]+'))) %>%
+  arrange(RequestDate) %>%
+  mutate(Requested = ifelse(is.na(InstallationDate), 'Not Installed', 'Installed'),
+         Installed = ifelse(is.na(InstallationDate), 0, 1),
+         Not_Installed = ifelse(is.na(InstallationDate), 1, 0))
+
+# this data set only includes the speed reducer requests that were installed
+installed <- sr_df %>%
+  filter(Requested == 'Installed')
+```
+
+### Accident Data Set
+
+The transformation needed in this data set includes dropping the NA values from the longitude and latitude columns and converting columns from character data type to a numeric data type.
+
+```{r}
+colnames(accidents)
+accidents <- accidents %>%
+  drop_na(longitude, latitude) %>%
+  mutate(latitude = as.numeric(latitude),
+         longitude = as.numeric(longitude),
+         number_of_persons_injured = as.numeric(number_of_persons_injured),
+         number_of_persons_killed = as.numeric(number_of_persons_killed))
+
+```
+
+
+## Exploratory
+
+### Speed Reducer
+
+
+```{r}
+description <- tibble(text = sr_df$Description)
+
+description %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+
+# Count by Borough
+sr_df %>% 
+  group_by(Requested, Borough) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(x = Borough, y = n, fill = Requested)) + 
+  geom_bar(stat = 'identity', position = position_dodge()) +
+  geom_text(aes(label = n), vjust= -0.5, color='Black',
+            position = position_dodge(0.9), size=3.5) +
+  scale_fill_brewer(palette = 'Paired') + 
+  labs(title = 'Requested Speed Reducer by Borough', x = 'Borough', y = 'Count')
+
+# Cumulative Count of Speed Reducers
+sr_df %>%
+  mutate(cumsum_Installed = cumsum(Installed),
+         cumsum_Not_Installed = cumsum(Not_Installed)) %>%
+  ggplot(aes(x = RequestDate)) + 
+  geom_line(mapping = aes(y = cumsum_Installed, color = 'red'), size = 1.5) +
+  geom_line(mapping = aes(y = cumsum_Not_Installed, color = 'blue'), size = 1.5) +
+  scale_color_discrete(name = 'Requested', labels = c('Not_Installed','Installed')) + 
+  labs(title = 'Cumulative Sum of Speed Reducers Over the Years', x = 'Requested Date',
+       y = 'Cumulative Sum')
+
+# Map of installed speed reducers
+long_lat <- sr_df %>%
+  filter(Requested == 'Installed') %>%
+  select(FromLongitude, FromLatitude)
+
+
+leaflet(long_lat) %>%
+  addTiles() %>% 
+  addCircleMarkers(~FromLongitude, ~FromLatitude, data = installed, 
+                   clusterOptions=markerClusterOptions()) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(-73.98, 40.75, zoom = 10)
+
+
+```
+
+
+### Accidents
+
+```{r}
+
+accidents %>%
+  drop_na(borough) %>%
+  count(borough) %>%
+  rename(accident_count = n) %>%
+  ggplot(aes(x = borough, y = accident_count)) +
+  geom_bar(stat = 'identity', fill = 'steelblue') +
+  geom_text(aes(label = accident_count), vjust= 1.5, color='white', size=3.5) +
+  labs(title = 'Accident Coount by Borough')
+
+
+accidents %>%
+  count(crash_date) %>%
+  rename(accident_count = n) %>%
+  ggplot(aes(x = crash_date, y = accident_count)) + 
+  geom_smooth(size = 1.5) +
+  labs(title = 'Accident Count Through the Years', x = 'Accident Date', 
+       y = 'Accident Count')
+
+
+```
+
+
+
+## Second Transformation
+
+After getting to know the data, I identified that I would like to get to go beyond the borough level and get to the neighborhood level. Additionally, the accidents data set starts from 2012 and the speed reducer data set begins from 1990.
+
+## Getting the Neighborhoods
+
+Need to include another dataset to match the coordinates to neighborhood.  From there, I can get the the aggregate on a lower level and see if there's a relationship between speed reducers and accidents.
+
+
+```{r}
+get <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
+
+neighborhoods <- readOGR(content(get,'text'), 'OGRGeoJSON', verbose = F)
+
+points_spdf_installed <- installed
+
+coordinates(points_spdf_installed) <- ~FromLongitude + FromLatitude
+(proj4string(points_spdf_installed) <- proj4string(neighborhoods))
+matches <- over(points_spdf_installed, neighborhoods)
+installed <- cbind(installed, matches)
+
+accidents <- accidents %>%
+  filter(longitude > -80) 
+
+points_spdf_acc <- accidents
+coordinates(points_spdf_acc) <- ~longitude + latitude
+proj4string(points_spdf_acc) <- proj4string(neighborhoods)
+matches <- over(points_spdf_acc, neighborhoods)
+matches <- matches %>%
+  rename(borough1 = 'borough')
+accidents <- cbind(accidents, matches)
+
+str(installed)
+str(accidents)
+```
+
+### Joining the Data Sets
+
+
+```{r}
+aggregated_installed <- installed %>%
+  filter(year(InstallationDate) >= 2012) %>%
+  group_by(borough, neighborhood) %>%
+  summarise(speed_reducer_count = n())
+
+
+aggregated_accidents <- accidents %>%
+  select(borough1, neighborhood, number_of_persons_injured, number_of_persons_killed,
+         number_of_pedestrians_injured, number_of_pedestrians_killed, 
+         number_of_cyclist_injured, number_of_cyclist_killed, number_of_motorist_injured,
+         number_of_motorist_killed) %>%
+  group_by(borough1, neighborhood) %>%
+  mutate(number_of_persons_injured = as.numeric(number_of_persons_injured),
+         number_of_persons_killed = as.numeric(number_of_persons_killed),
+         number_of_pedestrians_injured = as.numeric(number_of_pedestrians_injured),
+         number_of_cyclist_injured = as.numeric(number_of_cyclist_injured),
+         number_of_motorist_injured = as.numeric(number_of_motorist_injured),
+         number_of_motorist_killed = as.numeric(number_of_motorist_killed)
+         )%>%
+  summarise(accident_count = n(),
+            sum_injured = sum(number_of_persons_injured, na.rm = TRUE),
+            sum_mortality = sum(number_of_persons_killed, na.rm = TRUE),
+            sum_pedestrians_injured = sum(number_of_pedestrians_injured, na.rm = TRUE),
+
+            sum_cyclist_injured = sum(number_of_cyclist_injured, na.rm = TRUE),
+
+            sum_motorist_injured = sum(number_of_motorist_injured, na.rm = TRUE),
+            sum_motorist_killed = sum(number_of_motorist_killed, na.rm = TRUE)
+            )
+
+installed_and_accidents <- data.frame(left_join(aggregated_installed, aggregated_accidents, 
+                                     by = c('borough' = 'borough1',
+                                            'neighborhood' = 'neighborhood')))
+  
+```
+
+## Analysis
+
+The moment of truth, is there a relationship between speed reducer counts and accidents.  In order to do this analysis, I look at the correlation and attempt to construct a linear regression model.
+
+### Correlation
+
+```{r}
+# Source for this function: Professor Jason Bryer, DATA 606
+
+panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...){
+	usr <- par("usr"); on.exit(par(usr))
+	par(usr = c(0, 1, 0, 1))
+	r <- abs(cor(x, y))
+	rreal = cor(x, y)
+	txtreal <- format(c(rreal, 0.123456789), digits=digits)[1]
+	txt <- format(c(r, 0.123456789), digits=digits)[1]
+	if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+	text(0.5, 0.5, txtreal, cex = cex.cor * r)
+}
+
+pairs(installed_and_accidents[,3:10], lower.panel = panel.cor, pch = 19)
+```
+
+
+### Linear Regression
+
+```{r}
+lm_speed <- lm(speed_reducer_count ~ accident_count,
+                data = installed_and_accidents)
+summary(lm_speed)
+```
+
+
+Plotting Model and Residuals
+
+```{r}
+ggplot(data = installed_and_accidents, aes(x = accident_count, y = speed_reducer_count)) +
+  geom_point() + 
+  geom_smooth()
+
+ggplot(data = lm_speed, aes(x = .fitted, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+
+
+ggplot(data = lm_speed, aes(x = .resid)) +
+  geom_histogram() +
+  xlab("Residuals")
+
+ggplot(data = lm_speed, aes(sample = .resid)) +
+  stat_qq()
+```
+
+
+## Conclusion
+
+Contrary to my intuition, there is not strong enough evidence that indicate accidents have affect speed reducers in NYC neighborhoods.  The adjusted $R^2$ indicates that accidents only account for 18.15% variability of the installed speed reducers and the residuals of the linear regression has high variability.
+
+
+
+## Sources
+
+https://data.cityofnewyork.us/Transportation/Speed-Reducer-Tracking-System-SRTS-/9n6h-pt9g
+
+
+https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95
+
+
+https://data.beta.nyc//
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
